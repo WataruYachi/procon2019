@@ -23,16 +23,16 @@ data Match = Match
 
 instance FromJSON Match where
     parseJSON (Object v) = Match <$> v .: "id"
-                                 <*> v .: "intercalMillis"
+                                 <*> v .: "intervalMillis"
                                  <*> v .: "matchTo"
                                  <*> v .: "teamID"
                                  <*> v .: "turnMillis"
                                  <*> v .: "turns"
 
-data MatchInfo = MatchInfo {matches :: [Match]} deriving (Show, Generic)
+data MatchInfo = MatchInfo [Match] deriving (Show, Generic)
 
 instance FromJSON MatchInfo
-data Field = Field
+data MatchState = MatchState
              { width :: Int
              , height :: Int
              , points :: [[Int]]
@@ -65,8 +65,7 @@ data Action = Action
               , apply :: Int
               } deriving Show
 
-instance FromJSON Field
-instance ToJSON Field
+instance FromJSON MatchState
 
 instance FromJSON Team
 instance ToJSON Team
@@ -92,6 +91,9 @@ instance ToJSON Action where
                , "apply" .= apply
                ]
 
+data Status = Status {status :: T.Text} deriving (Show, Generic)
+instance FromJSON Status
+
 rawJSON :: B.ByteString
 rawJSON = "{\"agentID\":1, \"x\":2, \"y\":3}"
 
@@ -105,15 +107,29 @@ mkHeader :: Token -> Option Https
 mkHeader token = header "Authorization" token
 -}
 getMatchInfo :: (MonadHttp m) => Token -> m (JsonResponse MatchInfo)
-getMatchInfo token = req GET (https "localhost" /: "matches") NoReqBody jsonResponse (header "Authorization" token)
+getMatchInfo token = req GET (http "localhost" /: "matches") NoReqBody jsonResponse (header "Authorization" token)
+
+showText :: Int -> Text
+showText x = T.pack (show x)
+
+getMatchState :: (MonadHttp m) => Token -> Int -> m (JsonResponse MatchState)
+getMatchState token id = req GET (http "localhost" /: "matches" /: (showText id)) NoReqBody jsonResponse (header "Authorization" token)
+
+
+sendPing :: (MonadHttp m) => Token -> m (JsonResponse Status)
+sendPing token = req GET (http "localhost" /: "ping") NoReqBody jsonResponse (header "Authorization" token)
 
 token :: Token
 token = "procon30_example_token"
 main :: IO ()
 main = do
-    jsonData <- B.readFile "data.json"
+    {-jsonData <- B.readFile "data.json"
     let fieldData = decode jsonData :: Maybe Field
     let filedPoints = actions <$> fieldData
-    print filedPoints
+    print filedPoints-}
+    ping <- runReq def (sendPing token)
+    print $ responseBody ping
     response <- runReq def (getMatchInfo token)
     print $ responseBody response
+    state <- runReq def (getMatchState token 1)
+    print $ responseBody state
